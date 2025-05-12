@@ -1,0 +1,55 @@
+#./train.py --multirun hydra/launcher=slurm 
+
+defaults:
+  - hydra: default
+  # Allow the model to overwrite the settings below
+  - _self_
+
+project: ps-diff-stpp
+
+test: True
+use_gpu: True
+log_dir: './logs'
+seed: 123
+
+trainer:
+  _target_: pytorch_lightning.Trainer
+  accelerator: gpu
+  max_epochs: 5000
+  check_val_every_n_epoch: 10
+  gradient_clip_val: 2.
+  gradient_clip_algorithm: value
+  log_every_n_steps: 1
+
+datamodule:
+  root: './data'
+  data_type: 'stpp'
+  batch_size: 128
+  name: 'placeholder'
+
+model_params:
+  steps: 100
+  encoder_n_blocks: 1
+  hidden_dims: 32
+  classifier_layer: 3
+  mix_components: 16
+
+task_params:
+  optimizer:
+    lr_decay: 1e-5
+    weight_decay: 1e-4
+    lr_schedule: 1e-1
+    learning_rate: 1e-3
+  name: 'density'
+  metric: 'val/mmd_counting_stpp'
+  early_stopping: 20
+  point_process_type: ${datamodule.data_type}
+
+# run all seeds and dataset
+hydra:
+  job:
+    name: ${project}
+  sweeper:
+    params:
+      seed: int(9012835),int(2193852),int(6928301)
+      datamodule.name: earthquakes #,covid_nj_cases,pinwheel,citibike
