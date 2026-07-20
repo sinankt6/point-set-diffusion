@@ -32,7 +32,7 @@ model_params:
   encoder_n_blocks: 1
   hidden_dims: 32
   classifier_layer: 3
-  mix_components: 16
+  mix_components: 32
 
 task_params:
   optimizer:
