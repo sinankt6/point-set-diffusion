@@ -89,11 +89,14 @@ print("Starting script")
 def main(config: DictConfig):
     OmegaConf.resolve(config)
 
+    wandb_dir = os.environ.get("WANDB_DIR", os.path.abspath("logs"))
+    os.makedirs(wandb_dir, exist_ok=True)
+
     # Start wandb
     wandb.init(
         project=f"ps_diff_{config.task_params.point_process_type}_density",
         name=f"ps_diff_{config.task_params.point_process_type}_{config.datamodule.name}_{config.seed}",
-        dir=Path(os.path.abspath("logs")),
+        dir=wandb_dir,
     )
 
     OmegaConf.save(config, wandb.run.dir + "/config_hydra.yaml")
