@@ -24,13 +24,12 @@ SPACE_BOUNDARIES = {
     "pinwheel_spp": np.array([[-4.20, 4.79], [-4.44, 4.04]]),
     "pinwheel_stpp": np.array([[0.0, 30.0], [-4.20, 4.79], [-4.44, 4.04]]),
 }
-
-CLUSTER_COUNTS = {
-    "citibike": 817,
-}
-
 CLUSTER_COORDS_STD = {
     "citibike": {"lon": 0.02003 , "lat": 0.03107},
+}
+
+ACTIVE_CLUSTER_COUNTS = {
+    "citibike": 102,
 }
 
 LIMITS_MAPS = {

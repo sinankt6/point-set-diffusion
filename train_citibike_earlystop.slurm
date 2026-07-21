@@ -37,5 +37,6 @@ SEED=${SEEDS[$SLURM_ARRAY_TASK_ID]}
 
 python train.py --config-name stpp_train \
     datamodule.name=citibike \
+    model_params.noise_process=thomas \
     seed="$SEED" \
     hydra.run.dir="$RUN_DIR"
