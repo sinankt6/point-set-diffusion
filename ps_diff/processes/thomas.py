@@ -160,3 +160,51 @@ def generate_thomas(
     return Batch.remove_unnescessary_padding(
         points=points, mask=full_mask, space_bound=space_bound, kept=None
     )
+
+
+@typechecked
+def rescale_norm_thomas(
+    original_space_bound: TensorType[float, "dim", 2],
+    n_sequences: int,
+    cluster_dims: List[int],
+    parent_intensity: float,
+    intensity: Union[TensorType, None] = None,
+    scale: float = 1.0,
+    cluster_std: Union[TensorType, None] = None,
+    buffer_sigma: float = 4.0,
+) -> Batch:
+     """
+    Generate a batch of sequences from a Thomas cluster process on a normalized bounded
+    space of volume 2^dim: S = [-1, 1]^dim. Analog to rescale_normhpp
+    cluster_std and parent_intensity must be expressed in the normalized cooridnate system
+
+    Parameters
+    ----------
+    space_bound : TensorType[float, "dim", 2]
+        Boundaries of the metric space. If the metric space is in R^d consists of lower
+        and upper bound of each dimension with [dim, 2] shape
+    n_sequences : int
+        Number of sequences to generate
+    cluster_dims : List[int]
+        Indices of the dimensions that should be clustered via the Thomas process. For only spatial clustering, pass [1, 2]. [0] (Time) stays homogenous.
+    parent_intensity : float
+        Expected number of clusters per unit Area
+    offspring_intensity : Union[TensorType, None], optional
+        per sequence scaling of the offspring rate, set to 1 if None, by default None
+    offspring_scale : float, optional
+        Global scale for the offspring rate, 1.0 by default
+    cluster_std : Union[TensorType, None] = None,
+        Std of the offspring jittering around each parent. One vlaue per entry in cluster_dims (anisotropic). Set to 1 for all dims if None.
+    buffer_sigma : float, optional
+        Parent sampling window extension by buffersigma*cluster_std per dim to reduce edge effects, 4.0 by default.
+
+    Returns
+    -------
+    Batch
+        Batch of generated sequences
+    """
+    device = original_space_bound.device
+
+    # Get dimensionality of bounded space
+    dim = original_space_bound.shape[0]
+
