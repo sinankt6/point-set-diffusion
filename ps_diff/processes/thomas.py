@@ -89,13 +89,13 @@ def generate_thomas(
     )
     #wie viele sind echt, wie viele sind nur Padding
     parent_mask = (
-        torch.arange(max_parents, device=device)[None, :] < n_parents[: None]
+        torch.arange(max_parents, device=device)[None, :] < n_parents[:, None]
     )
 
     #child process ------------------------------------------
     #fake parents (pading) receive 0 childs because of mask
-    offspring_rate_per_parent = (offspring_intensity * offspring_scale)[: None] * parent_mask.float()
-    n_offspring = torch.poisson(mu) #each parent receives number of children
+    offspring_rate_per_parent = (offspring_intensity * offspring_scale)[:, None] * parent_mask.float()
+    n_offspring = torch.poisson(offspring_rate_per_parent) #each parent receives number of children
     max_offspring_per_parent = int(n_offspring.max().item()) + 1
 
 
@@ -145,7 +145,7 @@ def generate_thomas(
         homog_points = (
             torch.rand((n_sequences, max_samples, len(homog_dims)), device=device)
             *width_homog[None, None, :]
-            * space_bound_homog[:, 0][None, None, :]
+            + space_bound_homog[:, 0][None, None, :]
         )
         homog_points = homog_points * mask_1d[..., None]
 
@@ -173,7 +173,7 @@ def rescale_norm_thomas(
     cluster_std: Union[TensorType, None] = None,
     buffer_sigma: float = 4.0,
 ) -> Batch:
-     """
+    """
     Generate a batch of sequences from a Thomas cluster process on a normalized bounded
     space of volume 2^dim: S = [-1, 1]^dim. Analog to rescale_normhpp
     cluster_std and parent_intensity must be expressed in the normalized cooridnate system
@@ -189,9 +189,9 @@ def rescale_norm_thomas(
         Indices of the dimensions that should be clustered via the Thomas process. For only spatial clustering, pass [1, 2]. [0] (Time) stays homogenous.
     parent_intensity : float
         Expected number of clusters per unit Area
-    offspring_intensity : Union[TensorType, None], optional
+    offspring_intensity/intensity : Union[TensorType, None], optional
         per sequence scaling of the offspring rate, set to 1 if None, by default None
-    offspring_scale : float, optional
+    offspring_scale/scale: float, optional
         Global scale for the offspring rate, 1.0 by default
     cluster_std : Union[TensorType, None] = None,
         Std of the offspring jittering around each parent. One vlaue per entry in cluster_dims (anisotropic). Set to 1 for all dims if None.
@@ -207,4 +207,29 @@ def rescale_norm_thomas(
 
     # Get dimensionality of bounded space
     dim = original_space_bound.shape[0]
+
+    # Get normalized space bound [-1.0, 1.0]^dim
+    norm_bounded_space = torch.cat(
+        (
+            -torch.ones(dim)[..., None],
+            torch.ones(dim)[..., None],
+        ),
+        dim=-1,
+    ).to(device)
+
+    # Generate normalized TCP on bounded space of volume one
+    batch = generate_thomas(
+        space_bound=norm_bounded_space,
+        n_sequences=n_sequences,
+        cluster_dims=cluster_dims,
+        parent_intensity=parent_intensity,
+        offspring_intensity=intensity,
+        offspring_scale=scale,
+        cluster_std=cluster_std,
+        buffer_sigma=buffer_sigma,
+    )
+
+    batch.space_bound = original_space_bound
+
+    return batch
 
