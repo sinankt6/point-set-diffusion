@@ -67,7 +67,7 @@ def generate_thomas(
     space_bound_cluster = space_bound[cluster_dims]
     width_cluster = space_bound_cluster[:, 1] - space_bound_cluster[:, 0]
 
-    #parent process
+    #parent process ----------------------------------------
     # buffer for the edges
     buffer = buffer_sigma * cluster_std
     buf_width = width_cluster + 2 * buffer
@@ -91,5 +91,51 @@ def generate_thomas(
     parent_mask = (
         torch.arange(max_parents, device=device)[None, :] < n_parents[: None]
     )
+
+    #child process ------------------------------------------
+    #fake parents (pading) receive 0 childs because of mask
+    offspring_rate_per_parent = (offspring_intensity * offspring_scale)[: None] * parent_mask.float()
+    n_offspring = torch.poisson(mu) #each parent receives number of children
+    max_offspring_per_parent = int(n_offspring.max().item()) + 1
+
+
+    offsets = torch.randn(
+        (n_sequences, max_parents, max_offspring_per_parent, n_cluster_dims), device=device
+    ) * cluster_std[None, None, None, :]
+
+    offspring_positions = parent_positions[:, :, None, :] + offsets
+
+    #mask to check if padding or real child 
+    offspring_valid = (
+        torch.arange(max_offspring_per_parent, device=device)[None, None, :]
+        < n_offspring[:, :, None]
+    )
+    #check if points are in not buffered space
+    in_domain = (
+        (offspring_positions >= space_bound_cluster[:, 0]).all(-1)
+        & (offspring_positions <= space_bound_cluster[:, 1]).all(-1)
+    )
+    valid = offspring_valid & in_domain
+
+    #count number of valid points per sequence
+    flat_positions = offspring_positions.reshape(n_sequences, max_parents * max_offspring_per_parent, n_cluster_dims)
+    flat_valid = valid.reshape(n_sequences, max_parents * max_offspring_per_parent)
+
+    n_samples = flat_valid.sum(dim=1)
+    max_samples = int(n_samples.max().item()) + 1
+
+    #sortieren, sodass gültige punkte vorne rest hinten
+    sort_idx = torch.argsort((~flat_valid).float(), dim=1, stable=True)
+    flat_positions_sorted = torch.gather(
+        flat_positions, 1, sort_idx[..., None].expand(-1, -1, n_cluster_dims)
+    )[:, :max_samples]
+
+    mask_1d = torch.arange(max_samples, device=device)[None, :] < n_samples[:, None]
+    mask = mask_1d[..., None].repeat(1, 1, n_cluster_dims)
+    cluster_points = mask * flat_positions_sorted
+
+    #from hpp
+    assert (mask.sum(1)[:, 0] == n_samples).all(), "wrong number of cluster samples"
+
 
 
