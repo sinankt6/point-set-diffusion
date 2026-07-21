@@ -33,6 +33,7 @@ model_params:
   hidden_dims: 32
   classifier_layer: 3
   mix_components: 16
+  noise_process: hpp   # thomas
 
 task_params:
   optimizer:

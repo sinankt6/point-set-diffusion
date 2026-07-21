@@ -1,7 +1,9 @@
 import os
 from pathlib import Path
+import torch
 
-from ps_diff.data import DataModule
+
+from ps_diff.data import DataModule, CLUSTER_COUNTS, CLUSTER_COORDS_STD
 from ps_diff.diffusion.model import PSDiff
 from ps_diff.backbones.classifier import PointClassifier
 from ps_diff.distributions.intensities import MixtureIntensity
@@ -38,7 +40,9 @@ def instantiate_model(config, datamodule) -> PSDiff:
         distribution="multivar_normal",
     )
 
-    model = PSDiff(
+    noise_process = config.get("noise_process", "hpp")
+
+    model_kwargs = dict(
         classifier_model=classifier,
         intensity_model=intensity,
         space_bound=datamodule.dataset.space_bound,
@@ -47,7 +51,32 @@ def instantiate_model(config, datamodule) -> PSDiff:
         hpp_scale=datamodule.n_mean / (2**dim),
         emb_dim=config["hidden_dims"],
         encoder_n_blocks=config["encoder_n_blocks"],
+        noise_process=noise_process,
     )
+
+    if noise_process == "thomas":
+        cluster_dims = [1, 2]  # lon, lat — bei tpp hier anpassen
+        cluster_vol_norm = 2 ** len(cluster_dims)
+
+        n_stations = CLUSTER_COUNTS[datamodule.name]
+        std = CLUSTER_COORDS_STD[datamodule.name]
+
+        width_cluster = (
+            datamodule.dataset.space_bound[cluster_dims, 1]
+            - datamodule.dataset.space_bound[cluster_dims, 0]
+        )
+
+        scale_factor = 2.0 / width_cluster
+        raw_std = torch.tensor([0.02 * std["lon"], 0.02 * std["lat"]])
+
+        model_kwargs.update(
+            thomas_kappa=n_stations / cluster_vol_norm,
+            thomas_mu=datamodule.n_mean / n_stations,
+            thomas_cluster_std=scale_factor * raw_std,
+            thomas_cluster_dims=cluster_dims,
+        )
+
+    model = PSDiff(**model_kwargs)
     return model
 
 

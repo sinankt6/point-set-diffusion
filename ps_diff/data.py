@@ -25,6 +25,14 @@ SPACE_BOUNDARIES = {
     "pinwheel_stpp": np.array([[0.0, 30.0], [-4.20, 4.79], [-4.44, 4.04]]),
 }
 
+CLUSTER_COUNTS = {
+    "citibike": 817,
+}
+
+CLUSTER_COORDS_STD = {
+    "citibike": {"lon": 0.02003 , "lat": 0.03107},
+}
+
 LIMITS_MAPS = {
     "earthquakes": np.array([[123.43, 149.18], [25.41, 45.98]]),
     "covid_nj_cases": np.array([[-75.60, -73.90], [38.90, 41.20]]),

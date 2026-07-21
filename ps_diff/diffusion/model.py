@@ -10,7 +10,9 @@ from ps_diff.data import Batch
 from ps_diff.backbones.attention import AttentionPointEmb
 from ps_diff.backbones.embeddings import NyquistFrequencyEmbedding
 from ps_diff.processes.hpp import rescale_normhpp
+from ps_diff.processes.thomas import rescale_norm_thomas 
 from ps_diff.diffusion.utils import thin_and_add_probs
+
 
 patch_typeguard()
 
@@ -51,6 +53,11 @@ class PSDiff(nn.Module):
         emb_dim: int = 64,
         encoder_n_blocks: int = 4,
         max_time=100,
+        noise_process: str = "hpp",
+        thomas_kappa: float = None,
+        thomas_mu: float = None,
+        thomas_cluster_std: TensorType = None,
+        thomas_cluster_dims: list = None,  
     ) -> None:
         super().__init__()
         self.steps = steps
@@ -81,11 +88,46 @@ class PSDiff(nn.Module):
         self.max_time = max_time
         self.hpp_scale = hpp_scale
 
+        self.noise_process = noise_process
+        self.thomas_kappa = thomas_kappa
+        self.thomas_mu = thomas_mu
+        self.thomas_cluster_dims = thomas_cluster_dims
+        if thomas_cluster_std is not None:
+            self.register_buffer("thomas_cluster_std", thomas_cluster_std)
+        else:
+            self.thomas_cluster_std = None
+
         self.set_encoders(
             emb_dim=emb_dim,
             encoder_n_blocks=encoder_n_blocks,
             steps=steps,
         )
+
+    def _sample_noise(
+        self,
+        space_bound: TensorType[float, "dim", 2],
+        n_sequences: int,
+        intensity: TensorType = None,
+    ) -> Batch:
+        if self.noise_process == "hpp":
+            return rescale_normhpp(
+                original_space_bound=space_bound,
+                n_sequences=n_sequences,
+                intensity=intensity,
+                scale=self.hpp_scale,
+            )
+        elif self.noise_process == "thomas":
+            return rescale_norm_thomas(
+                original_space_bound=space_bound,
+                n_sequences=n_sequences,
+                cluster_dims=self.thomas_cluster_dims,
+                parent_intensity=self.thomas_kappa,
+                intensity=intensity,
+                scale=self.thomas_mu,
+                cluster_std=self.thomas_cluster_std,
+            )
+        else:
+            raise ValueError(f"Unknown noise_process: {self.noise_process}")
 
     def set_encoders(
         self,
@@ -246,15 +288,14 @@ class PSDiff(nn.Module):
         # Thin x_0
         x_0_kept, x_0_thinned = x_0.thin(alpha=self.retain[n])
 
-        # Superposition with HPP (add)
-        hpp = rescale_normhpp(
-            original_space_bound=x_0.space_bound,
+        # Superposition with HPP (add) or Thomas
+        noise_events = self._sample_noise(
+            space_bound=x_0.space_bound,
             n_sequences=len(x_0),
             intensity=self.add_prob[n],
-            scale=self.hpp_scale,
         )
 
-        x_n = x_0_kept.add_events(hpp)
+        x_n = x_0_kept.add_events(noise_events)
 
         return x_n, x_0_thinned
 
@@ -328,10 +369,9 @@ class PSDiff(nn.Module):
         """
 
         # Init x_N by sampling from HPP
-        x_N = rescale_normhpp(
-            original_space_bound=space_bound,
+        x_N = self._sample_noise(
+            space_bound=space_bound,
             n_sequences=n_samples,
-            scale=self.hpp_scale,
         )
         x_n_1 = x_N
 
@@ -448,10 +488,9 @@ class PSDiff(nn.Module):
             Sampled x_0 and forecasted points
         """
         # Start with all noise (equivalent to noising our condition)
-        x_next = rescale_normhpp(
-            original_space_bound=condition.space_bound,
+        x_next = self._sample_noise(
+            space_bound=condition.space_bound,
             n_sequences=len(condition),
-            scale=self.hpp_scale,
         )
         # Sample x_N-1, ..., x_1 by applying posterior
         for n_int in range(self.steps - 1, 0, -1):
@@ -516,10 +555,9 @@ class PSDiff(nn.Module):
             Sampled x_0 and forecasted points
         """
         # Start with all noise (same as noising our condition)
-        x_next = rescale_normhpp(
-            original_space_bound=condition.space_bound,
+        x_next = self._sample_noise(
+            space_bound=condition.space_bound,
             n_sequences=len(condition),
-            scale=self.hpp_scale,
         )
         # Sample x_N-1, ..., x_1 by applying posterior
         for n_int in range(self.steps - 1, 0, -1):
