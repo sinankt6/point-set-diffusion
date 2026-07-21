@@ -137,5 +137,26 @@ def generate_thomas(
     #from hpp
     assert (mask.sum(1)[:, 0] == n_samples).all(), "wrong number of cluster samples"
 
+    #add time dimension
+    if homog_dims: 
+        space_bound_homog = space_bound[homog_dims]
+        width_homog = space_bound[:, 1] - space_bound_homog[:, 0]
+        #uniform sampling
+        homog_points = (
+            torch.rand((n_sequences, max_samples, len(homog_dims)), device=device)
+            *width_homog[None, None, :]
+            * space_bound_homog[:, 0][None, None, :]
+        )
+        homog_points = homog_points * mask_1d[..., None]
 
+        points = torch.zeros((n_sequences, max_samples, dim), device=device)
+        points[..., cluster_dims] = cluster_points
+        points[..., homog_dims] = homog_points
+    else:
+            points = cluster_points
 
+    full_mask = mask_1d[..., None].repeat(1, 1, dim)
+
+    return Batch.remove_unnescessary_padding(
+        points=points, mask=full_mask, space_bound=space_bound, kept=None
+    )
