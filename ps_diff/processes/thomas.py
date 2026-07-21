@@ -140,7 +140,7 @@ def generate_thomas(
     #add time dimension
     if homog_dims: 
         space_bound_homog = space_bound[homog_dims]
-        width_homog = space_bound[:, 1] - space_bound_homog[:, 0]
+        width_homog = space_bound_homog[:, 1] - space_bound_homog[:, 0]
         #uniform sampling
         homog_points = (
             torch.rand((n_sequences, max_samples, len(homog_dims)), device=device)
